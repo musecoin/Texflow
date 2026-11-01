@@ -1,0 +1,42 @@
+{
+  "name": "texflow",
+  "version": "1.0.0-phase0",
+  "private": true,
+  "description": "TEXFLOW AI 1.0 - Factory Intelligence OS (ERP + MES for integrated garment factories)",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "bootstrap:offline": "bash scripts/bootstrap-offline.sh",
+    "db:up": "bash scripts/dev-db.sh start",
+    "db:down": "bash scripts/dev-db.sh stop",
+    "db:migrate": "node packages/db/src/migrate.ts",
+    "db:seed": "node packages/db/src/seed.ts",
+    "db:reset": "node packages/db/src/migrate.ts --reset && node packages/db/src/seed.ts",
+    "build:web": "node apps/web/build.mjs",
+    "dev": "node apps/web/build.mjs && node --env-file-if-exists=.env apps/api/src/main.ts",
+    "start": "node --env-file-if-exists=.env apps/api/src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --test-concurrency=1 \"packages/*/test/*.test.ts\" \"apps/api/test/*.test.ts\"",
+    "test:unit": "node --test \"packages/*/test/*.test.ts\"",
+    "test:api": "node --test --test-concurrency=1 \"apps/api/test/*.test.ts\"",
+    "test:e2e": "node apps/web/build.mjs && node --test e2e/*.test.ts",
+    "backup": "bash scripts/backup.sh"
+  },
+  "dependencies": {
+    "zod": "3.25.76",
+    "ws": "8.21.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "clsx": "2.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3"
+  }
+}

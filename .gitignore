@@ -1,0 +1,7 @@
+node_modules/
+apps/web/dist/
+apps/web/android/
+e2e/screenshots/
+backups/
+.env
+*.log

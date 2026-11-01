@@ -1,0 +1,10 @@
+{
+  "appId": "com.texflow.factory",
+  "appName": "TEXFLOW",
+  "webDir": "dist",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false },
+  "plugins": {
+    "CapacitorHttp": { "enabled": false }
+  }
+}

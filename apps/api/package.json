@@ -1,0 +1,16 @@
+{
+  "name": "@texflow/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test --test-concurrency=1 \"test/*.test.ts\""
+  },
+  "dependencies": {
+    "@texflow/db": "workspace:*",
+    "@texflow/shared": "workspace:*",
+    "ws": "8.21.3",
+    "zod": "3.25.76"
+  }
+}
