@@ -54,6 +54,8 @@ export const ExtractOrderSheetReq = z.object({
   imageBase64: z.string().min(100).max(8_000_000).regex(/^[A-Za-z0-9+/]+=*$/, 'base64 olmalı'),
 });
 
+export const ParseOrderSheetReq = z.object({ text: z.string().min(2).max(200_000) });
+
 export const CreateColorReq = z.object({ code: z.string().trim().min(1).max(20).regex(/^[A-Za-z0-9._\-]+$/), name: z.string().trim().min(1).max(80) });
 export const CreateSizeReq = z.object({ code: z.string().trim().min(1).max(20).regex(/^[A-Za-z0-9._\-/]+$/) });
 

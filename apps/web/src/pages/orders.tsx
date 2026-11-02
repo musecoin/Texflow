@@ -14,7 +14,7 @@ export function OrdersPage() {
   return (
     <>
       <PageHeader title={t('nav.orders')} subtitle="Müşteri siparişleri ve üretim durumu"
-        actions={can('order.create') && <><Button variant="secondary" onClick={() => go('orders/import')}>📷 Fotoğraftan sipariş</Button><Button onClick={() => setCreating(true)}>+ Yeni sipariş</Button></>} />
+        actions={can('order.create') && <><Button variant="secondary" onClick={() => go('orders/import')}>📄 Föyden sipariş</Button><Button onClick={() => setCreating(true)}>+ Yeni sipariş</Button></>} />
       <Card>
         <div className="flex flex-wrap gap-2 mb-4">
           <Input placeholder="Sipariş no, müşteri, PO…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" aria-label="Sipariş ara" />

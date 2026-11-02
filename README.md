@@ -56,7 +56,19 @@ docs             mimari, kabul kriterleri, test raporu, açıklar ve riskler
 
 API belgesi: çalışan sunucuda `GET /api/v1/openapi.json` (OpenAPI 3.1; 46 iş uç noktası + sağlık/OpenAPI).
 
-## Fotoğraftan sipariş (yapay zeka)
+## Föyden sipariş
+
+Siparişler → **📄 Föyden sipariş**. Bu ekrana iki yoldan veri girilebilir.
+
+**1. İçe aktarma metni (ücretsiz, varsayılan yol)**
+- Föyün fotoğrafı Claude sohbetinde okunur ve `TEXFLOW-FOY v1 {…}` biçiminde bir metin üretilir.
+- Bu metin ekrana yapıştırılır ve "Çözümle"ye basılır.
+- Bu yolda sunucu hiçbir yapay zeka servisini çağırmaz. Metin doğrulanır ve aşağıdaki kontrol ekranı açılır.
+
+**2. Uygulama içinden fotoğraf (isteğe bağlı, ücretli)**
+- Ayrıntıları aşağıda.
+
+### Fotoğraftan okuma (yapay zeka, isteğe bağlı)
 
 Siparişler → **📷 Fotoğraftan sipariş**. Sipariş veya kesim föyünün fotoğrafı Claude API ile okunur.
 - **Okuma:** Yapay zeka yalnızca kağıtta yazanı aktarır.

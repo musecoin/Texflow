@@ -150,8 +150,8 @@ function FactoryPanel({ d }: { d: any }) {
           : <Kpi icon="₺" label="Maliyet & kâr" value="" pending="Ölçülmüyor" hint="Faz E" />}
       </div>
       <div className="grid gap-4 mb-4"><ProcessMap d={d} /></div>
-      <div className="grid xl:grid-cols-[1fr_24rem] gap-4">
-        <div className="grid gap-4 min-w-0 content-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_24rem] gap-4">
+        <div className="grid grid-cols-1 gap-4 min-w-0 content-start">
           {o && (
             <Card title="Geciken ve termini yaklaşan siparişler">
               <Table rows={o.risky} rowKey={(r: any) => r.id} onRow={(r: any) => go('orders/' + r.id)} empty="Termin riski olan sipariş yok"

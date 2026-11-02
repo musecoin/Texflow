@@ -277,8 +277,8 @@ test('photo → order: sheet photo is read, reviewed, missing sizes/model added,
 
   await loginAs(page, 'admin@demo.texflow.local');
   await openMenu(page, 'Sipariş Yönetimi', 'Siparişler');
-  await page.getByRole('button', { name: /Fotoğraftan sipariş/ }).click();
-  await page.getByRole('heading', { level: 1, name: 'Fotoğraftan sipariş' }).waitFor();
+  await page.getByRole('button', { name: /Föyden sipariş/ }).click();
+  await page.getByRole('heading', { level: 1, name: 'Föyden sipariş' }).waitFor();
   await page.getByLabel('Föy fotoğrafı').setInputFiles({ name: 'foy.jpg', mimeType: 'image/jpeg', buffer: jpeg });
   await page.getByRole('button', { name: 'Oku' }).click();
   await page.getByText('Okuma sonucu ve kontroller').waitFor();
@@ -311,6 +311,38 @@ test('photo → order: sheet photo is read, reviewed, missing sizes/model added,
   assert.match(body, /Taslak/);
   assert.match(body, /1\.420|1420/);
   await page.screenshot({ path: path.join(shots, '11-photo-import-order.png'), fullPage: true });
+  assert.deepEqual(errs, []);
+  await ctx.close();
+});
+
+test('text import on a phone (free path): paste TEXFLOW-FOY text → review → DRAFT order', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  const page = await ctx.newPage(); const errs = collectErrors(page);
+  const calls = aiCalls.length;
+  await loginAs(page, 'planlama@demo.texflow.local');
+  await page.goto(base + '/#/orders/import');
+  await page.getByRole('heading', { level: 1, name: 'Föyden sipariş' }).waitFor();
+  const sheetText = 'TEXFLOW-FOY v1\n' + JSON.stringify({
+    customer: 'Nordic', partyNo: '2001', modelCode: '288-PNT', modelName: 'Paça Reçme Pantolon', productType: 'PANTOLON', fabric: null, composition: null, labelBrand: null,
+    cuttingDate: null, dueDate: '2026-12-30', workshop: null, notes: [], decorations: [],
+    sizes: [{ size: 'L', ratio: 1 }, { size: 'XL', ratio: 1 }, { size: 'XXL', ratio: 1 }, { size: '3XL', ratio: 1 }],
+    sections: [{ title: 'İSTENEN', kind: 'requested', printedTotal: 400, lines: [{ color: 'siyah', size: null, quantity: 240, uncertain: false }, { color: 'lacivert', size: null, quantity: 160, uncertain: false }] }],
+    measurements: [], uncertainties: [] });
+  await page.getByLabel('İçe aktarma metni').fill(sheetText);
+  await page.getByRole('button', { name: 'Çözümle' }).click();
+  await page.getByText('Okuma sonucu ve kontroller').waitFor();
+  await page.getByText(/satır toplamı 400, kağıttaki toplamla tutuyor/).waitFor();
+  assert.equal(aiCalls.length, calls, 'no AI call on the text path');
+  // everything matched from master data (model and sizes were added in the previous test); planner cannot create models
+  const create = page.getByRole('button', { name: /Taslak sipariş oluştur \(400 adet\)/ });
+  await create.scrollIntoViewIfNeeded();
+  // no horizontal page overflow on a phone
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= 413), 'page must not be wider than the phone screen');
+  await page.screenshot({ path: path.join(shots, '12-mobile-text-import.png'), fullPage: true });
+  assert.equal(await create.isDisabled(), false);
+  await create.click();
+  await page.getByText('Taslak sipariş oluşturuldu').waitFor();
+  await page.getByRole('heading', { level: 1, name: /SIP/ }).waitFor();
   assert.deepEqual(errs, []);
   await ctx.close();
 });

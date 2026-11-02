@@ -3,7 +3,7 @@
  * an editable draft (matching, checks, size split) → a DRAFT sales order is created through the
  * normal order endpoint. Nothing is saved before the user presses "Taslak sipariş oluştur".
  */
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import { get, post } from '../api.ts';
 import { localToday, fmtQty } from '../i18n.ts';
@@ -12,7 +12,7 @@ import { useCan, go } from '../app.tsx';
 import { buildDraft, normSize, normTr, type OrderSheetExtractionData as OrderSheetExtraction, type SheetCheck } from '../../../../packages/shared/src/orderSheetCore.ts';
 
 interface Extract {
-  extraction: OrderSheetExtraction; checks: SheetCheck[]; ai: { model: string; usage: { inputTokens: number; outputTokens: number } | null };
+  extraction: OrderSheetExtraction; checks: SheetCheck[]; ai: { model: string; usage: { inputTokens: number; outputTokens: number } | null } | null;
   matches: {
     customer: { written: string | null; customerId: string | null; candidates: { id: string; name: string; currency: string }[] };
     model: { written: string | null; modelId: string | null; status: string | null; variants: { colorId: string; sizeId: string }[] };
@@ -37,61 +37,69 @@ async function compress(file: File): Promise<{ dataUrl: string; base64: string }
 export function OrderImportPage() {
   const status = useLoad<{ enabled: boolean; model: string | null; perHour: number }>(() => get('/api/v1/orders/import/status'), []);
   const [photo, setPhoto] = useState<{ dataUrl: string; base64: string } | null>(null);
+  const [text, setText] = useState('');
   const [reading, setReading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<Extract | null>(null);
+  const [runId, setRunId] = useState(0);
 
   const pick = async (f: File | undefined) => {
     if (!f) return;
     setErr(null); setResult(null);
     try { setPhoto(await compress(f)); } catch (e) { setErr(errorText(e)); }
   };
-  const read = async () => {
-    if (!photo) return;
-    setReading(true); setErr(null);
-    try { setResult(await post<Extract>('/api/v1/orders/import/extract', { mediaType: 'image/jpeg', imageBase64: photo.base64 })); }
+  const call = async (fn: () => Promise<Extract>) => {
+    setReading(true); setErr(null); setResult(null);
+    try { setResult(await fn()); setRunId((n) => n + 1); }
     catch (e) { setErr(errorText(e)); }
     finally { setReading(false); }
   };
+  const read = () => photo && call(() => post<Extract>('/api/v1/orders/import/extract', { mediaType: 'image/jpeg', imageBase64: photo.base64 }));
+  const parse = () => call(() => post<Extract>('/api/v1/orders/import/parse', { text }));
+  const paste = async () => { try { setText(await navigator.clipboard.readText()); } catch { setErr('Pano okunamadı; metni kutuya uzun basıp yapıştırın.'); } };
 
   if (status.error) return <ErrorBox error={status.error} onRetry={status.reload} />;
   if (!status.data) return <Loading />;
   return (
     <>
-      <PageHeader title="Fotoğraftan sipariş" subtitle="Sipariş veya kesim föyünün fotoğrafını çekin; yapay zeka okur, siz kontrol edip onaylarsınız."
+      <PageHeader title="Föyden sipariş" subtitle="Sipariş veya kesim föyünü içe aktarın; sistem kontrol eder, siz düzenleyip onaylarsınız."
         actions={<Button variant="secondary" onClick={() => go('orders')}>Siparişlere dön</Button>} />
-      {!status.data.enabled ? (
-        <div role="alert" className="rounded-xl border border-warn/60 bg-warn/10 p-4 text-sm text-ink">
-          Bu özellik sunucuda henüz açık değil. Yönetici, Render ortam değişkenlerine <b>ANTHROPIC_API_KEY</b> ekleyince çalışır.
+      <Card title="1 · İçe aktarma metni" className="mb-4">
+        <p className="mb-2 text-sm text-ink">Föyün fotoğrafını Claude sohbetine gönderin; size <b>TEXFLOW-FOY</b> ile başlayan bir metin verilir. O metnin tamamını kopyalayıp buraya yapıştırın.</p>
+        <textarea aria-label="İçe aktarma metni" value={text} onChange={(e) => setText(e.target.value)} rows={5} placeholder="TEXFLOW-FOY v1 { … }"
+          className="w-full rounded-lg border border-line bg-canvas p-3 font-mono text-xs text-ink" />
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => void paste()}>Panodan yapıştır</Button>
+          <Button onClick={() => void parse()} disabled={reading || text.trim().length < 2} loading={reading && !photo}>Çözümle</Button>
         </div>
-      ) : (
-        <>
-          <Card title="1 · Fotoğraf" className="mb-4">
-            <div className="flex flex-wrap gap-2">
-              <label className="inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-lg bg-brand-700 px-4 font-semibold text-white">
-                <span aria-hidden>📷</span>Fotoğraf çek
-                <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} />
-              </label>
-              <label className="inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-4 font-semibold text-ink">
-                <span aria-hidden>🖼</span>Galeriden seç
-                <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Föy fotoğrafı" className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} />
-              </label>
-              {photo && <Button onClick={() => void read()} loading={reading} disabled={reading}>{result ? 'Yeniden oku' : 'Oku'}</Button>}
-            </div>
-            <p className="mt-2 text-xs text-muted">Tüm sayfa görünsün, düz ve aydınlık çekin. Fotoğraf saklanmaz; okunan veriler siz onaylayana kadar kaydedilmez. Saatlik sınır: {status.data.perHour} okuma.</p>
-            {reading && <p role="status" className="mt-3 text-sm text-ink">Okunuyor… genellikle 10–40 saniye sürer.</p>}
-            {err && <p role="alert" className="mt-3 rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm text-ink">{err}</p>}
-            {photo && !result && <img src={photo.dataUrl} alt="Seçilen föy" className="mt-3 max-h-96 rounded-lg border border-line" />}
-          </Card>
-          {result && photo && <Review key={result.ai.usage?.inputTokens + photo.base64.slice(-16)} r={result} photo={photo.dataUrl} />}
-        </>
+        <p className="mt-2 text-xs text-muted">Yapay zeka servisi çağrılmaz, ek ücret yoktur. Siz onaylayana kadar hiçbir kayıt oluşturulmaz.</p>
+      </Card>
+      {status.data.enabled && (
+        <Card title="veya · Fotoğrafı uygulamada okut" className="mb-4">
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-lg bg-brand-700 px-4 font-semibold text-white">
+              <span aria-hidden>📷</span>Fotoğraf çek
+              <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} />
+            </label>
+            <label className="inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-4 font-semibold text-ink">
+              <span aria-hidden>🖼</span>Galeriden seç
+              <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Föy fotoğrafı" className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} />
+            </label>
+            {photo && <Button onClick={() => void read()} loading={reading} disabled={reading}>{result?.ai ? 'Yeniden oku' : 'Oku'}</Button>}
+          </div>
+          <p className="mt-2 text-xs text-muted">Sunucudaki yapay zeka anahtarıyla okunur (ücretli). Saatlik sınır: {status.data.perHour} okuma.</p>
+          {photo && !result && <img src={photo.dataUrl} alt="Seçilen föy" className="mt-3 max-h-96 rounded-lg border border-line" />}
+        </Card>
       )}
+      {reading && <p role="status" className="mb-4 text-sm text-ink">{photo ? 'Okunuyor… genellikle 10–40 saniye sürer.' : 'Çözümleniyor…'}</p>}
+      {err && <p role="alert" className="mb-4 rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm text-ink">{err}</p>}
+      {result && <Review key={runId} r={result} photo={result.ai ? photo?.dataUrl ?? null : null} />}
     </>
   );
 }
 
 // ---------------------------------------------------------------- review & confirm
-function Review({ r, photo }: { r: Extract; photo: string }) {
+function Review({ r, photo }: { r: Extract; photo: string | null }) {
   const can = useCan();
   const x = r.extraction;
   const ref = useLoad<any>(async () => {
@@ -117,7 +125,7 @@ function Review({ r, photo }: { r: Extract; photo: string }) {
   const [dueDate, setDueDate] = useState(x.dueDate ?? '');
   const [currency, setCurrency] = useState('');
   const defaultNotes = [
-    'Fotoğraftan içe aktarıldı (yapay zeka okuması, kullanıcı onaylı).',
+    r.ai ? 'Fotoğraftan içe aktarıldı (yapay zeka okuması, kullanıcı onaylı).' : 'Föyden içe aktarıldı (içe aktarma metni, kullanıcı onaylı).',
     x.partyNo && `Parti no: ${x.partyNo}`, x.cuttingDate && `Kesim tarihi: ${x.cuttingDate}`, x.fabric && `Kumaş: ${x.fabric}`,
     x.composition && `Kompozisyon: ${x.composition}`, x.labelBrand && `Etiket: ${x.labelBrand}`, x.decorations.length ? `Baskı/aksesuar: ${x.decorations.join(', ')}` : null,
     ...x.notes.map((n) => `Not: ${n}`),
@@ -181,13 +189,13 @@ function Review({ r, photo }: { r: Extract; photo: string }) {
   const allColorsMapped = colors.every((c) => colorMap[normTr(c)]) && sizes.every((s) => sizeMap[s]);
 
   return (
-    <div className="grid xl:grid-cols-[minmax(0,1fr)_26rem] gap-4">
-      <div className="grid gap-4 min-w-0 content-start">
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_26rem] gap-4">
+      <div className="grid grid-cols-1 gap-4 min-w-0 content-start">
         <Card title="2 · Okuma sonucu ve kontroller">
           <ul className="flex flex-col gap-1.5 text-sm">
             {r.checks.map((c, i) => <li key={i} className="flex gap-2"><span aria-hidden className={level(c.level)}>{c.level === 'error' ? '■' : c.level === 'warn' ? '▲' : '●'}</span><span className="text-ink">{c.text}</span></li>)}
           </ul>
-          <p className="mt-2 text-[11px] text-muted">Okuyan: {r.ai.model}. Toplam, tekrar ve beden kontrolleri yapay zekaya değil, sistemin kendi hesabına dayanır.</p>
+          <p className="mt-2 text-[11px] text-muted">Kaynak: {r.ai ? `fotoğraf (${r.ai.model})` : 'içe aktarma metni'}. Toplam, tekrar ve beden kontrolleri yapay zekaya değil, sistemin kendi hesabına dayanır.</p>
         </Card>
 
         <Card title="3 · Sipariş bilgileri">
@@ -282,10 +290,23 @@ function Review({ r, photo }: { r: Extract; photo: string }) {
           <p className="mt-2 text-xs text-muted">Sipariş TASLAK olarak açılır; onay her zamanki gibi Siparişler ekranından yapılır.</p>
         </div>
       </div>
-      <div className="xl:sticky xl:top-20 self-start">
-        <Card title="Fotoğraf"><a href={photo} target="_blank" rel="noreferrer"><img src={photo} alt="Okunan föy" className="w-full rounded-lg border border-line" /></a>
-          <p className="mt-2 text-xs text-muted">Rakamları buradan karşılaştırın. Büyütmek için dokunun.</p></Card>
-      </div>
+      {photo ? (
+        <div className="xl:sticky xl:top-20 self-start">
+          <Card title="Fotoğraf"><a href={photo} target="_blank" rel="noreferrer"><img src={photo} alt="Okunan föy" className="w-full rounded-lg border border-line" /></a>
+            <p className="mt-2 text-xs text-muted">Rakamları buradan karşılaştırın. Büyütmek için dokunun.</p></Card>
+        </div>
+      ) : (
+        <div className="xl:sticky xl:top-20 self-start">
+          <Card title="Okunan diğer bilgiler">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              {([['Müşteri', x.customer], ['Parti no', x.partyNo], ['Model', [x.modelCode, x.modelName].filter(Boolean).join(' · ')], ['Kesim tarihi', x.cuttingDate], ['Termin', x.dueDate],
+                ['Kumaş', x.fabric], ['Kompozisyon', x.composition], ['Etiket', x.labelBrand], ['Baskı/aksesuar', x.decorations.join(', ')]] as [string, string | null][])
+                .filter(([, v]) => v).map(([k, v]) => <Fragment key={k}><dt className="text-muted">{k}</dt><dd className="text-ink">{v}</dd></Fragment>)}
+            </dl>
+            <p className="mt-2 text-xs text-muted">Kağıtla karşılaştırmak için föyün kendisine bakın.</p>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

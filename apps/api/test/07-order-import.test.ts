@@ -146,3 +146,20 @@ test('photo import: hourly budget per organization', async () => {
   // another organization has its own budget
   expectStatus(await (await h.login('B', 'admin')).post('/api/v1/orders/import/extract', IMG), 200);
 });
+
+test('text import (no AI): pasted TEXFLOW-FOY text is validated, matched and checked; no AI call, no records', async () => {
+  const admin = await h.login('A', 'admin');
+  const calls = seen.length;
+  const text = 'TEXFLOW-FOY v1\n' + JSON.stringify(SHEET, null, 1) + '\n';
+  const d = expectStatus(await admin.post('/api/v1/orders/import/parse', { text }), 200);
+  assert.equal(seen.length, calls, 'the AI service is not called');
+  assert.equal(d.ai, null);
+  assert.equal(d.extraction.partyNo, '1092');
+  assert.ok(d.checks.some((c: any) => c.code === 'CUT_VS_REQUESTED'));
+  assert.equal(d.matches.colors.find((m: any) => m.written === 'siyah').colorId, h.a.colors.SYH);
+  // truncated / foreign / wrongly shaped text is rejected with a clear message, never guessed
+  expectStatus(await admin.post('/api/v1/orders/import/parse', { text: text.slice(0, text.length / 2) }), 400, 'VALIDATION_FAILED');
+  expectStatus(await admin.post('/api/v1/orders/import/parse', { text: 'siyah 810 laci 610' }), 400, 'VALIDATION_FAILED');
+  expectStatus(await admin.post('/api/v1/orders/import/parse', { text: '{"sections":[{"title":"x","lines":[{"color":"a","quantity":-1}]}]}' }), 400, 'VALIDATION_FAILED');
+  expectStatus(await (await h.login('A', 'depo')).post('/api/v1/orders/import/parse', { text }), 403, 'FORBIDDEN');
+});
