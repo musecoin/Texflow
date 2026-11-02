@@ -27,7 +27,7 @@ export async function migrate(opts: { reset?: boolean; log?: (m: string) => void
   const env = loadDbEnv();
   const owner = parseDatabaseUrl(env.DATABASE_URL);
   const app = parseDatabaseUrl(env.APP_DATABASE_URL);
-  if (app.user !== 'texflow_app') throw new Error('APP_DATABASE_URL must use the role texflow_app');
+  if (app.user !== 'texflow_app') throw new Error(`APP_DATABASE_URL must use the role texflow_app (got "${app.user}")`);
 
   // 1. ensure database exists. Managed services (Neon, RDS, ...) give a non-superuser owner and a
   //    pre-created database, so only touch the maintenance DB when the target is actually missing.
