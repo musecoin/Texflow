@@ -5,6 +5,7 @@
 #   APP_DATABASE_URL  optional; derived from DATABASE_URL + APP_DB_PASSWORD when unset
 #   SEED_DEMO=1       load the DEMO organization once (demo servers only)
 set -eu
+echo "texflow: container starting (node $(node -v))"
 : "${DATABASE_URL:?DATABASE_URL is required}"
 if [ -z "${APP_DATABASE_URL:-}" ]; then
   : "${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}"
@@ -13,6 +14,8 @@ if [ -z "${APP_DATABASE_URL:-}" ]; then
   APP_DATABASE_URL=$(printf '%s\n' "$URLS" | sed -n 2p)
   export DATABASE_URL APP_DATABASE_URL
 fi
+echo "texflow: running migrations"
 node packages/db/src/migrate.ts
 if [ "${SEED_DEMO:-0}" = "1" ]; then ALLOW_DEMO_SEED=1 node packages/db/src/seed.ts; fi
+echo "texflow: starting API on port ${PORT:-8080}"
 exec node apps/api/src/main.ts

@@ -136,8 +136,19 @@ export class Connection implements Queryable {
 
   constructor(cfg: PgConfig) { this.cfg = cfg; }
 
+  /** Whole handshake (TCP + TLS + auth) is bounded so a stalled server can never hang startup silently. */
   async connect(): Promise<void> {
+    const ms = this.cfg.connectTimeoutMs ?? 15_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error(`PostgreSQL connection to ${this.cfg.host} timed out after ${ms} ms (TCP/TLS/auth)`)), ms); });
+    try { await Promise.race([this.handshake(), timeout]); }
+    catch (e) { this.closed = true; try { this.socket?.destroy(); } catch { /* ignore */ } throw e; }
+    finally { clearTimeout(timer); }
+  }
+
+  private async handshake(): Promise<void> {
     const raw = net.connect({ host: this.cfg.host, port: this.cfg.port });
+    this.socket = raw;
     raw.setNoDelay(true);
     await new Promise<void>((res, rej) => {
       const t = setTimeout(() => { raw.destroy(); rej(new Error('PostgreSQL connect timeout')); }, this.cfg.connectTimeoutMs ?? 10_000);
@@ -151,6 +162,7 @@ export class Connection implements Queryable {
       if (answer !== 'S') throw new Error('Server refused TLS');
       const opts: tls.ConnectionOptions = { servername: net.isIP(this.cfg.host) ? undefined : this.cfg.host, ...(typeof this.cfg.ssl === 'object' ? this.cfg.ssl : {}) };
       sock = tls.connect({ ...opts, socket: raw });
+      this.socket = sock;
       await new Promise<void>((res, rej) => { (sock as tls.TLSSocket).once('secureConnect', () => res()); sock.once('error', rej); });
     }
     this.socket = sock;
