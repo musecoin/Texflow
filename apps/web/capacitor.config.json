@@ -1,9 +1,14 @@
 {
   "appId": "com.texflow.factory",
-  "appName": "TEXFLOW",
+  "appName": "TEXFLOW AI",
   "webDir": "dist",
-  "server": { "androidScheme": "https" },
-  "android": { "allowMixedContent": false },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  },
   "plugins": {
     "CapacitorHttp": { "enabled": false }
   }

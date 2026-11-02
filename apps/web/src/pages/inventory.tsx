@@ -216,6 +216,14 @@ export function ScanPage() {
   };
   useEffect(() => {
     if (!cam) return;
+    // Android app: native scanner plugin (@capacitor/barcode-scanner), hint 0 = QR_CODE
+    const native = (globalThis as { Capacitor?: { Plugins?: Record<string, any> } }).Capacitor?.Plugins?.CapacitorBarcodeScanner;
+    if (native) {
+      native.scanBarcode({ hint: 0, scanInstructions: 'Top etiketindeki QR kodu okutun' })
+        .then((r: { ScanResult?: string }) => { setCam(false); if (r?.ScanResult) void lookup(r.ScanResult); })
+        .catch((e: Error) => { setCam(false); setErr('Tarama iptal edildi veya kamera izni yok: ' + e.message); });
+      return;
+    }
     const BD = (globalThis as { BarcodeDetector?: new (o: { formats: string[] }) => Detector }).BarcodeDetector;
     if (!BD) { setErr('Bu tarayıcı kamera ile QR okumayı desteklemiyor; kodu elle girin.'); setCam(false); return; }
     let stream: MediaStream | null = null; let stop = false;
@@ -241,7 +249,7 @@ export function ScanPage() {
           <Field label="QR / top kodu"><Input autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="TFROLL:…" className="text-lg" /></Field>
           <div className="grid grid-cols-2 gap-2"><Button type="submit" className="min-h-14 text-base">Bul</Button><Button type="button" variant="secondary" className="min-h-14 text-base" onClick={() => setCam((c) => !c)}>{cam ? 'Kamerayı kapat' : 'Kamera ile tara'}</Button></div>
           {err && <div role="alert" className="text-sm text-red-700 dark:text-red-300">{err}</div>}
-          {cam && <video ref={video} className="w-full rounded-lg bg-black aspect-video" muted playsInline />}
+          {cam && !(globalThis as { Capacitor?: { Plugins?: Record<string, unknown> } }).Capacitor?.Plugins?.CapacitorBarcodeScanner && <video ref={video} className="w-full rounded-lg bg-black aspect-video" muted playsInline />}
         </form>
       </Card>
     </>

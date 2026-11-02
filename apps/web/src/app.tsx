@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { clsx } from 'clsx';
-import { session, get, login, logout, connectEvents, ApiError } from './api.ts';
+import { session, get, login, logout, connectEvents, ApiError, isNative, getServer, setServer } from './api.ts';
 import { t, locale, setLocale } from './i18n.ts';
 import { LiveContext, ToastHost, Button, Field, Input, Loading, ErrorBox, errorText } from './ui.tsx';
 import { Dashboard } from './pages/dashboard.tsx';
@@ -38,12 +38,14 @@ const NAV: { key: string; path: string; icon: string; perm: string; mobile?: boo
 function LoginScreen() {
   const [org, setOrg] = useState('DEMO'); const [email, setEmail] = useState(''); const [pw, setPw] = useState('');
   const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  const native = isNative(); const [server, setSrv] = useState(getServer());
   return (
     <main className="min-h-dvh grid place-items-center p-4 bg-canvas">
       <form className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-sm flex flex-col gap-4"
-        onSubmit={async (e) => { e.preventDefault(); setBusy(true); setErr(null); try { await login(org.trim(), email.trim(), pw); } catch (x) { setErr(errorText(x)); } finally { setBusy(false); } }}>
+        onSubmit={async (e) => { e.preventDefault(); setBusy(true); setErr(null); try { if (native) setServer(server); await login(org.trim(), email.trim(), pw); } catch (x) { setErr(errorText(x)); } finally { setBusy(false); } }}>
         <div className="flex items-center gap-3"><Logo /><div><div className="font-bold text-ink text-lg">{t('app.name')}</div><div className="text-xs text-muted">{t('app.tagline')}</div></div></div>
         <h1 className="text-lg font-semibold text-ink">{t('login.title')}</h1>
+        {native && <Field label="Sunucu adresi" hint="TEXFLOW API'nin çalıştığı adres, örn. https://texflow.firmaniz.com veya http://192.168.1.20:8080"><Input name="server" type="url" inputMode="url" autoCapitalize="none" value={server} onChange={(e) => setSrv(e.target.value)} required placeholder="https://" /></Field>}
         <Field label={t('login.org')}><Input name="org" value={org} onChange={(e) => setOrg(e.target.value)} autoCapitalize="characters" required /></Field>
         <Field label={t('login.email')}><Input name="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
         <Field label={t('login.password')}><Input name="password" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} required /></Field>

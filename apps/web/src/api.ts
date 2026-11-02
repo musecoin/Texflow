@@ -25,7 +25,18 @@ export const session = {
   clear() { save(null); },
 };
 
-export const API_BASE = (globalThis as { TEXFLOW_API_BASE?: string }).TEXFLOW_API_BASE ?? '';
+/** True inside the Capacitor Android shell (the UI is bundled in the APK, the API runs on your server). */
+export const isNative = () => !!(globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
+const SERVER_KEY = 'texflow.server';
+export function getServer(): string { try { return localStorage.getItem(SERVER_KEY) ?? ''; } catch { return ''; } }
+export function setServer(url: string) {
+  const clean = url.trim().replace(/\/+$/, '');
+  if (clean && !/^https?:\/\/[^\s/]+(:\d+)?(\/.*)?$/.test(clean)) throw new Error('Sunucu adresi http(s)://adres[:port] biçiminde olmalı');
+  try { localStorage.setItem(SERVER_KEY, clean); } catch { /* ignore */ }
+  API_BASE = clean;
+}
+/** Same origin in the browser; the configured server in the Android app. */
+export let API_BASE = (globalThis as { TEXFLOW_API_BASE?: string }).TEXFLOW_API_BASE ?? (isNative() ? getServer() : '');
 
 async function raw(method: string, path: string, body?: unknown, idemKey?: string): Promise<Response> {
   const headers: Record<string, string> = {};
@@ -77,7 +88,10 @@ export const get = <T = any>(p: string) => api<T>('GET', p);
 export const post = <T = any>(p: string, b: unknown = {}, o?: { idempotencyKey?: string }) => api<T>('POST', p, b, o);
 
 export async function login(organizationCode: string, email: string, password: string) {
-  const r = await fetch(API_BASE + '/api/v1/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ organizationCode, email, password }) });
+  if (isNative() && !API_BASE) throw new ApiError(0, 'NO_SERVER', 'Önce sunucu adresini girin');
+  let r: Response;
+  try { r = await fetch(API_BASE + '/api/v1/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ organizationCode, email, password }) }); }
+  catch { throw new ApiError(0, 'NETWORK', `Sunucuya ulaşılamadı${API_BASE ? ' (' + API_BASE + ')' : ''}`); }
   const j = await r.json().catch(() => null);
   if (!r.ok) throw new ApiError(r.status, j?.error?.code ?? 'ERROR', j?.error?.message ?? 'Giriş başarısız');
   save(j);
