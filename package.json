@@ -26,6 +26,8 @@
     "backup": "bash scripts/backup.sh"
   },
   "dependencies": {
+    "@texflow/db": "workspace:*",
+    "@texflow/shared": "workspace:*",
     "zod": "3.25.76",
     "ws": "8.21.3",
     "react": "19.2.8",
