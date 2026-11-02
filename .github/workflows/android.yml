@@ -25,6 +25,9 @@ jobs:
         working-directory: apps/web
         run: |
           [ -d android ] || pnpm exec cap add android
+          # the native QR scanner library requires Android 8.0+ (API 26)
+          sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 26/' android/variables.gradle
+          grep -n minSdkVersion android/variables.gradle
           pnpm exec cap sync android
       - name: Build debug APK
         working-directory: apps/web/android
