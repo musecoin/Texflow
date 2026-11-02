@@ -22,8 +22,9 @@ COPY --from=build --chown=texflow:texflow /app/node_modules ./node_modules
 COPY --from=build --chown=texflow:texflow /app/packages ./packages
 COPY --from=build --chown=texflow:texflow /app/apps/api ./apps/api
 COPY --from=build --chown=texflow:texflow /app/apps/web/dist ./apps/web/dist
+COPY --from=build --chown=texflow:texflow /app/scripts ./scripts
 USER texflow
 EXPOSE 8080
-HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:8080/health/ready || exit 1
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:${PORT:-8080}/health/live || exit 1
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "apps/api/src/main.ts"]
+CMD ["sh", "scripts/start-server.sh"]

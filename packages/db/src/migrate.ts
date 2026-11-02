@@ -29,17 +29,33 @@ export async function migrate(opts: { reset?: boolean; log?: (m: string) => void
   const app = parseDatabaseUrl(env.APP_DATABASE_URL);
   if (app.user !== 'texflow_app') throw new Error('APP_DATABASE_URL must use the role texflow_app');
 
-  // 1. ensure database exists
-  const admin = new Connection({ ...owner, database: 'postgres' });
-  await admin.connect();
+  // 1. ensure database exists. Managed services (Neon, RDS, ...) give a non-superuser owner and a
+  //    pre-created database, so only touch the maintenance DB when the target is actually missing.
+  let target: Connection | null = new Connection(owner);
+  try { await target.connect(); } catch (e) {
+    target = null;
+    if ((e as { code?: string }).code !== '3D000') throw e; // 3D000 = database does not exist
+    const admin = new Connection({ ...owner, database: 'postgres' });
+    await admin.connect();
+    try { await admin.query(`CREATE DATABASE ${ident(owner.database)}`); log(`created database ${owner.database}`); } finally { await admin.end(); }
+  }
+  // 2. least-privilege runtime role. Only attributes a CREATEROLE (non-superuser) owner may set are used.
+  const roleConn = target ?? new Connection(owner);
+  if (!target) await roleConn.connect();
   try {
-    const exists = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [owner.database]);
-    if (!exists.rowCount) { await admin.query(`CREATE DATABASE ${ident(owner.database)}`); log(`created database ${owner.database}`); }
-    const role = await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [app.user]);
+    const role = await roleConn.query<{ rolsuper: boolean; rolbypassrls: boolean }>('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1', [app.user]);
     const pw = literal(app.password ?? '');
-    if (!role.rowCount) await admin.query(`CREATE ROLE texflow_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD ${pw}`);
-    else await admin.query(`ALTER ROLE texflow_app LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD ${pw}`);
-  } finally { await admin.end(); }
+    if (!role.rowCount) await roleConn.query(`CREATE ROLE texflow_app LOGIN NOCREATEDB NOCREATEROLE PASSWORD ${pw}`);
+    else {
+      if (role.rows[0].rolsuper || role.rows[0].rolbypassrls) throw new Error('texflow_app must not be superuser or BYPASSRLS');
+      try { await roleConn.query(`ALTER ROLE texflow_app LOGIN PASSWORD ${pw}`); }
+      catch (e) {
+        // role created by another (super)user that this owner may not administer: keep its password
+        if ((e as { code?: string }).code !== '42501') throw e;
+        log('warning: texflow_app exists and cannot be altered by this owner; keeping its current password');
+      }
+    }
+  } finally { await roleConn.end(); }
 
   const c = new Connection(owner);
   await c.connect();

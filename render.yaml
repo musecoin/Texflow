@@ -1,0 +1,27 @@
+# Render Blueprint: one Docker web service. The database is external (Neon), so paste its
+# owner connection string (unpooled, sslmode=require) into DATABASE_URL when prompted.
+services:
+  - type: web
+    name: texflow
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerCommand: sh scripts/start-server.sh
+    healthCheckPath: /health/ready
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_DB_PASSWORD
+        generateValue: true
+      - key: SEED_DEMO
+        value: "1"
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: TRUST_PROXY
+        value: "1"
+      - key: CORS_ORIGINS
+        value: https://localhost,capacitor://localhost,http://localhost

@@ -58,7 +58,8 @@ export function parseDatabaseUrl(url: string): PgConfig {
     user: decodeURIComponent(u.username),
     password: decodeURIComponent(u.password),
     database: decodeURIComponent(u.pathname.replace(/^\//, '')),
-    ssl: sslmode === 'require' || sslmode === 'verify-full' ? (sslmode === 'require' ? { rejectUnauthorized: false } : true) : false,
+    // require = encrypted (no CA check, like libpq); verify-full = encrypted + certificate verified. SNI is always sent (Neon routes by it).
+    ssl: sslmode === 'verify-full' ? true : sslmode === 'require' || sslmode === 'verify-ca' ? { rejectUnauthorized: false } : false,
   };
 }
 
@@ -148,7 +149,7 @@ export class Connection implements Queryable {
       raw.write(msg(null, int32(80877103)));
       const answer = await new Promise<string>((res, rej) => { raw.once('data', (d) => res(d.toString('utf8', 0, 1))); raw.once('error', rej); });
       if (answer !== 'S') throw new Error('Server refused TLS');
-      const opts: tls.ConnectionOptions = typeof this.cfg.ssl === 'object' ? this.cfg.ssl : { servername: this.cfg.host };
+      const opts: tls.ConnectionOptions = { servername: net.isIP(this.cfg.host) ? undefined : this.cfg.host, ...(typeof this.cfg.ssl === 'object' ? this.cfg.ssl : {}) };
       sock = tls.connect({ ...opts, socket: raw });
       await new Promise<void>((res, rej) => { (sock as tls.TLSSocket).once('secureConnect', () => res()); sock.once('error', rej); });
     }

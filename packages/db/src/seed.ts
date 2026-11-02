@@ -127,7 +127,7 @@ export async function seedOrganization(c: Connection, o: { code: string; name: s
 
 async function main() {
   const env = loadDbEnv();
-  if (process.env.NODE_ENV === 'production') throw new Error('DEMO seed is not allowed in production');
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== '1') throw new Error('DEMO seed is not allowed in production (set ALLOW_DEMO_SEED=1 for a demo server)');
   const c = new Connection(parseDatabaseUrl(env.DATABASE_URL));
   await c.connect();
   try {
