@@ -38,7 +38,7 @@ async function loginAs(page: Page, email: string) {
   await page.getByLabel('E-posta').fill(email);
   await page.getByLabel('Şifre').fill(PASSWORD);
   await page.getByRole('button', { name: 'Giriş yap' }).click();
-  await page.getByRole('heading', { name: 'Fabrika Kontrol Merkezi' }).waitFor();
+  await page.getByRole('heading', { level: 1, name: /Paneli$/ }).waitFor();
 }
 
 function collectErrors(page: Page) {
@@ -141,9 +141,28 @@ test('desktop: order → work order → receive & inspect roll → reserve → l
   await page.getByRole('link', { name: new RegExp(orderNo) }).click();
   await page.locator('[aria-current="step"]', { hasText: 'Malzeme' }).first().waitFor();
   await page.goto(base + '/#/');
-  await page.getByText('Siparişin dijital yolculuğu').waitFor();
+  await page.getByRole('heading', { level: 1, name: 'Fabrika Yönetim Paneli' }).waitFor();
+  await page.getByText('Siparişin yolculuğu').waitFor();
   await page.getByText(orderNo).first().waitFor();
+  // clickable process map: live stations link to real screens
+  await page.getByRole('list', { name: 'Süreç adımları' }).getByRole('link', { name: /Kumaş deposu/ }).waitFor();
   await page.screenshot({ path: path.join(shots, '00-desktop-control-center.png'), fullPage: true });
+  // role panels share the same live data: the released work order appears on the production panel
+  await page.getByRole('tab', { name: 'Üretim' }).click();
+  await page.getByRole('heading', { level: 1, name: 'Üretim Müdürü Paneli' }).waitFor();
+  await page.getByRole('tabpanel').getByRole('table').getByText(/IE-\d{5}/).first().waitFor();
+  await page.getByRole('tabpanel').getByText('ölçülmüyor').first().waitFor();
+  await page.screenshot({ path: path.join(shots, '00b-desktop-production.png'), fullPage: true });
+  await page.getByRole('tab', { name: 'Depo' }).click();
+  await page.getByRole('heading', { level: 1, name: 'Depo Paneli' }).waitFor();
+  await page.getByText('Stok miktarları (birim bazında, birimler toplanmaz)').waitFor();
+  await page.screenshot({ path: path.join(shots, '00c-desktop-warehouse.png'), fullPage: true });
+  // light mode is a real alternative theme, remembered per device
+  await page.getByRole('button', { name: 'Açık temaya geç' }).click();
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
+  await page.screenshot({ path: path.join(shots, '00d-desktop-warehouse-light.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Koyu temaya geç' }).click();
+  await page.getByRole('tab', { name: 'Fabrika Yönetimi' }).click();
   assert.deepEqual(errs, []);
   // menu follows the design's sections; unbuilt sections open an honest roadmap page with no data
   await openMenu(page, 'Satın Alma', /^Tedarikçiler/);
@@ -201,3 +220,28 @@ test('mobile (Android size): bottom navigation, QR lookup, offline guard blocks 
   assert.deepEqual(errs, []);
   await ctx.close();
 });
+
+test('operator (Android size): role home with prioritized actions; unrecorded entries are disabled, never faked', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  const page = await ctx.newPage(); const errs = collectErrors(page);
+  await loginAs(page, 'operator@demo.texflow.local');
+  await page.getByRole('heading', { level: 1, name: 'Operatör Paneli' }).waitFor();
+  // operator has no order permission: no factory-management tab
+  assert.equal(await page.getByRole('tab', { name: 'Fabrika Yönetimi' }).count(), 0);
+  const qr = page.getByRole('button', { name: /QR okut/ });
+  assert.equal(await qr.isEnabled(), true);
+  for (const name of [/Sağlam adet gir/, /Hata bildir/, /Duruş bildir/]) assert.equal(await page.getByRole('button', { name }).isDisabled(), true);
+  await page.getByRole('button', { name: /İş emrini görüntüle/ }).waitFor();
+  for (const box of await page.getByRole('tabpanel').locator('button').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) assert.ok(box >= 44, `tap target ${box}px`);
+  // shown identity is a role title
+  await page.getByRole('navigation', { name: 'Alt menü' }).getByRole('button', { name: 'Menü' }).click();
+  await page.getByText('DEMO Operatör · DEMO').waitFor();
+  await page.mouse.click(200, 30); // tap the backdrop to close the sheet
+  await page.getByRole('navigation', { name: 'Bölümler' }).waitFor({ state: 'detached' });
+  await page.screenshot({ path: path.join(shots, '09-mobile-operator.png'), fullPage: true });
+  await qr.click();
+  await page.getByLabel('QR / top kodu').waitFor();
+  assert.deepEqual(errs, []);
+  await ctx.close();
+});
+

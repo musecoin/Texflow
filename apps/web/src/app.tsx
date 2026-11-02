@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import { session, get, login, logout, connectEvents, ApiError, isNative, getServer, setServer } from './api.ts';
 import { t, locale, setLocale } from './i18n.ts';
 import { LiveContext, ToastHost, Button, Field, Input, Loading, ErrorBox, errorText } from './ui.tsx';
-import { Dashboard } from './pages/dashboard.tsx';
+import { Home } from './pages/home.tsx';
 import { OrdersPage, OrderDetail } from './pages/orders.tsx';
 import { ModelsPage, ModelDetail } from './pages/models.tsx';
 import { InventoryPage, RollDetail, ScanPage } from './pages/inventory.tsx';
@@ -28,7 +28,7 @@ export const useCan = () => { const me = useMe(); return (p: string) => me.permi
 
 // bottom navigation on phones: the operator's four most used screens
 const MOBILE_NAV: { label: string; path: string; icon: string; perm: string }[] = [
-  { label: 'nav.dashboard', path: '', icon: '▦', perm: 'order.read' },
+  { label: 'nav.dashboard', path: '', icon: '▦', perm: 'org.read' },
   { label: 'nav.inventory', path: 'inventory', icon: '◫', perm: 'inventory.read' },
   { label: 'nav.workOrders', path: 'work-orders', icon: '⚙', perm: 'workorder.read' },
   { label: 'nav.scan', path: 'scan', icon: '⌗', perm: 'inventory.read' },
@@ -110,7 +110,18 @@ function LoginScreen() {
   );
 }
 
-function Logo() { return <div className="size-9 rounded-lg bg-gradient-to-br from-brand-400 to-cyan-600 text-onbrand grid place-items-center font-black" aria-hidden>T</div>; }
+function Logo() { return <div className="size-9 rounded-lg bg-brand-600 text-white grid place-items-center font-black" aria-hidden>T</div>; }
+
+// light / dark theme: dark default (factory floor); choice remembered per device
+const readTheme = (): 'dark' | 'light' => { try { return localStorage.getItem('texflow.theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; } };
+const applyTheme = (th: 'dark' | 'light') => { if (th === 'light') document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme'); };
+applyTheme(readTheme());
+function ThemeToggle() {
+  const [th, setTh] = useState(readTheme());
+  const next = th === 'dark' ? 'light' : 'dark';
+  return <button className="text-xs text-muted min-h-10 min-w-10 px-2 rounded-lg hover:bg-subtle" aria-label={next === 'light' ? 'Açık temaya geç' : 'Koyu temaya geç'} title={next === 'light' ? 'Açık tema' : 'Koyu tema'}
+    onClick={() => { applyTheme(next); try { localStorage.setItem('texflow.theme', next); } catch { /* ignore */ } setTh(next); }}>{th === 'dark' ? '☀' : '☾'}</button>;
+}
 
 function GlobalSearch() {
   const [q, setQ] = useState(''); const [res, setRes] = useState<{ label: string; path: string }[]>([]);
@@ -166,6 +177,7 @@ function Shell({ children, route }: { children: ReactNode; route: string[] }) {
           <span className={clsx('size-2 rounded-full', !online ? 'bg-red-600' : live ? 'bg-emerald-600' : 'bg-slate-400')} />{!online ? t('conn.offline') : live ? t('conn.live') : t('conn.online')}
         </span>
         {me.organization.isDemo && <span className="hidden md:inline text-xs font-bold rounded px-2 py-1 bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-50">DEMO</span>}
+        <ThemeToggle />
         <button className="text-xs text-muted min-h-10 px-2" onClick={() => setLocale(locale === 'tr' ? 'en' : 'tr')} aria-label="Dil">{locale === 'tr' ? 'EN' : 'TR'}</button>
         <span className="hidden lg:block"><Button variant="ghost" onClick={() => void logout()}>{t('common.logout')}</Button></span>
       </header>
@@ -199,7 +211,7 @@ function Shell({ children, route }: { children: ReactNode; route: string[] }) {
 function Routes({ route }: { route: string[] }) {
   const [a, b] = route;
   switch (a) {
-    case undefined: return <Dashboard />;
+    case undefined: return <Home />;
     case 'orders': return b ? <OrderDetail id={b} /> : <OrdersPage />;
     case 'models': return b ? <ModelDetail id={b} /> : <ModelsPage />;
     case 'inventory': return <InventoryPage />;

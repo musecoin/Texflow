@@ -16,7 +16,7 @@ export interface NavSection {
 }
 
 export const SECTIONS: NavSection[] = [
-  { key: 'dashboard', label: 'Ana Panel', labelEn: 'Control centre', icon: '▦', path: '', perm: 'order.read', links: [], planned: [],
+  { key: 'dashboard', label: 'Ana Panel', labelEn: 'Control centre', icon: '▦', path: '', perm: 'org.read', links: [], planned: [],
     summary: 'Fabrikanın anlık durumu, uyarılar ve sipariş yolculuğu.' },
   { key: 'orders', label: 'Sipariş Yönetimi', labelEn: 'Order management', icon: '☰', summary: 'Müşteri siparişleri, revizyonlar ve sipariş durumu.',
     links: [{ label: 'Siparişler', path: 'orders', perm: 'order.read' }],

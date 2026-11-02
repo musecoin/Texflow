@@ -15,7 +15,7 @@ const ACTION_TR: Record<string, string> = {
 };
 export const actionLabel = (a: string) => ACTION_TR[a] ?? a;
 
-function Kpi({ icon, label, value, hint, tone, pending }: { icon: string; label: string; value: ReactNode; hint?: string; tone?: 'warn' | 'ok'; pending?: string }) {
+export function Kpi({ icon, label, value, hint, tone, pending }: { icon: string; label: string; value: ReactNode; hint?: string; tone?: 'warn' | 'ok'; pending?: string }) {
   return (
     <div className={clsx('rounded-xl border border-line bg-surface/80 p-3.5 flex gap-3', pending && 'opacity-70')}>
       <div className={clsx('size-10 shrink-0 rounded-lg grid place-items-center text-lg', pending ? 'bg-subtle text-muted' : 'bg-brand-400/15 text-brand-700 dark:text-brand-300')} aria-hidden>{icon}</div>
@@ -31,7 +31,7 @@ function Kpi({ icon, label, value, hint, tone, pending }: { icon: string; label:
 }
 
 type StepState = 'done' | 'active' | 'todo' | 'later';
-function Journey({ order }: { order: any }) {
+export function Journey({ order }: { order: any }) {
   const s = order.summary.stage as string;
   const rank = ['AWAITING_CONFIRMATION', 'AWAITING_WORK_ORDER', 'AWAITING_RELEASE', 'AWAITING_MATERIAL', 'MATERIAL_RESERVED'].indexOf(s);
   const st = (i: number): StepState => (rank > i ? 'done' : rank === i ? 'active' : 'todo');

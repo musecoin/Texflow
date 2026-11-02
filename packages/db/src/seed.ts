@@ -21,8 +21,52 @@ export const ROLE_PERMISSIONS: Record<string, { name: string; perms: string[] | 
   WAREHOUSE: { name: 'Depo', perms: ['org.read', 'material.read', 'inventory.read', 'inventory.receive', 'inventory.adjust.request', 'workorder.read', 'reservation.create', 'order.read'] },
   QC_INSPECTOR: { name: 'Kalite Kontrol', perms: ['org.read', 'material.read', 'inventory.read', 'inventory.inspect'] },
   INVENTORY_CONTROLLER: { name: 'Stok Kontrol (onay)', perms: ['org.read', 'material.read', 'inventory.read', 'inventory.adjust.approve', 'audit.read'] },
+  FACTORY_MANAGER: { name: 'Fabrika Müdürü', perms: ['org.read', 'customer.read', 'order.read', 'model.read', 'bom.read', 'material.read', 'inventory.read', 'workorder.read', 'audit.read'] },
+  PRODUCTION_MANAGER: { name: 'Üretim Sorumlusu', perms: ['org.read', 'order.read', 'model.read', 'bom.read', 'material.read', 'inventory.read', 'workorder.read', 'workorder.create', 'workorder.release', 'reservation.create', 'reservation.release'] },
+  OPERATOR: { name: 'Operatör', perms: ['org.read', 'material.read', 'inventory.read', 'workorder.read'] },
   VIEWER: { name: 'Salt Okunur', perms: ['org.read', 'customer.read', 'order.read', 'model.read', 'bom.read', 'material.read', 'inventory.read', 'workorder.read'] },
 };
+
+/** Users added in 3.1. Display names are role titles only — never personal names. */
+const ADDED_USERS: [string, string, string, 'IST1' | 'BUR1' | null][] = [
+  ['fabrikamuduru', 'Fabrika Müdürü', 'FACTORY_MANAGER', null], ['uretim', 'Üretim Sorumlusu', 'PRODUCTION_MANAGER', 'IST1'], ['operator', 'Operatör', 'OPERATOR', 'IST1'],
+];
+
+/**
+ * Non-destructive upgrade of an existing organization: adds roles from ROLE_PERMISSIONS and the 3.1
+ * users that are missing. Never updates or deletes existing rows. Returns what was added.
+ */
+export async function ensureRoleSet(c: Connection, orgCode: string, o: { password: string; emailDomain: string }): Promise<string[]> {
+  const org = (await c.query<{ id: string; is_demo: boolean }>('SELECT id, is_demo FROM organization WHERE code = $1', [orgCode])).rows[0];
+  if (!org) throw new Error(`organization ${orgCode} not found`);
+  const added: string[] = [];
+  await c.query('BEGIN');
+  try {
+    await c.query("SELECT set_config('app.org_id', $1, true)", [org.id]);
+    const tag = org.is_demo ? 'DEMO ' : '';
+    const allPerms = (await c.query<{ code: string }>('SELECT code FROM permission')).rows.map((r) => r.code);
+    const roleIds = Object.fromEntries((await c.query<{ code: string; id: string }>('SELECT code, id FROM role WHERE organization_id = $1', [org.id])).rows.map((r) => [r.code, r.id]));
+    for (const [code, def] of Object.entries(ROLE_PERMISSIONS)) {
+      if (roleIds[code]) continue;
+      roleIds[code] = (await c.query<{ id: string }>('INSERT INTO role (organization_id, code, name, is_system) VALUES ($1,$2,$3,true) RETURNING id', [org.id, code, def.name])).rows[0].id;
+      for (const p of def.perms === '*' ? allPerms : def.perms) await c.query('INSERT INTO role_permission (organization_id, role_id, permission_code) VALUES ($1,$2,$3)', [org.id, roleIds[code], p]);
+      added.push(`role ${code}`);
+    }
+    const factories = Object.fromEntries((await c.query<{ code: string; id: string }>('SELECT code, id FROM factory WHERE organization_id = $1', [org.id])).rows.map((r) => [r.code, r.id]));
+    let pwHash: string | null = null;
+    for (const [key, name, role, fcode] of ADDED_USERS) {
+      const email = `${key}@${o.emailDomain}`;
+      if ((await c.query('SELECT 1 FROM app_user WHERE organization_id = $1 AND email = $2', [org.id, email])).rowCount) continue;
+      if (fcode && !factories[fcode]) continue; // organization without that factory: skip rather than guess
+      pwHash ??= await hashPassword(o.password);
+      const id = (await c.query<{ id: string }>('INSERT INTO app_user (organization_id, email, display_name, password_hash) VALUES ($1,$2,$3,$4) RETURNING id', [org.id, email, `${tag}${name}`, pwHash])).rows[0].id;
+      await c.query('INSERT INTO user_role (organization_id, user_id, role_id, factory_id) VALUES ($1,$2,$3,$4)', [org.id, id, roleIds[role], fcode ? factories[fcode] : null]);
+      added.push(`user ${email}`);
+    }
+    await c.query('COMMIT');
+  } catch (e) { await c.query('ROLLBACK'); throw e; }
+  return added;
+}
 
 export interface SeededOrg {
   orgId: string; factoryId: string; factory2Id: string; fabricWarehouseId: string; quarantineBinId: string; binA1Id: string;
@@ -76,6 +120,7 @@ export async function seedOrganization(c: Connection, o: { code: string; name: s
       ['admin', 'Sistem Yöneticisi', 'ADMIN', null], ['planlama', 'Planlama Uzmanı', 'PLANNER', null], ['teknik', 'Modelist / Teknik Ofis', 'TECHNOLOGIST', null],
       ['teknikmudur', 'Teknik Müdür', 'TECH_MANAGER', null], ['depo', 'Depo Sorumlusu', 'WAREHOUSE', factoryId], ['kalite', 'Kalite Kontrol Uzmanı', 'QC_INSPECTOR', factoryId],
       ['stokkontrol', 'Stok Kontrol', 'INVENTORY_CONTROLLER', null], ['izleyici', 'İzleyici', 'VIEWER', null], ['bursadepo', 'Bursa Depo', 'WAREHOUSE', factory2Id],
+      ...ADDED_USERS.map(([k, n, r, f]) => [k, n, r, f === 'IST1' ? factoryId : f === 'BUR1' ? factory2Id : null] as [string, string, string, string | null]),
     ];
     for (const [key, name, role, fid] of userDefs) {
       const email = `${key}@${o.emailDomain}`;
@@ -132,8 +177,13 @@ async function main() {
   await c.connect();
   try {
     const exists = await c.query("SELECT 1 FROM organization WHERE code = 'DEMO'");
-    if (exists.rowCount) { console.log('DEMO organization already exists — run `pnpm db:reset` to recreate.'); return; }
     const password = process.env.DEMO_PASSWORD ?? 'Demo!2026';
+    if (exists.rowCount) {
+      // existing DEMO data is kept; only missing roles/users are added
+      const added = await ensureRoleSet(c, 'DEMO', { password, emailDomain: 'demo.texflow.local' });
+      console.log(added.length ? `DEMO organization upgraded (added: ${added.join(', ')})` : 'DEMO organization already up to date.');
+      return;
+    }
     const s = await seedOrganization(c, { code: 'DEMO', name: 'DEMO Tekstil A.Ş.', isDemo: true, password, emailDomain: 'demo.texflow.local',
       settings: { allowSelfApproval: true, demoNotice: 'Bu organizasyon DEMO verisi içerir. Tek kullanıcıyla deneme için öz-onay açık.' }, withDemoModel: true });
     console.log(`DEMO organization seeded (org code: DEMO). Users (password from DEMO_PASSWORD):`);

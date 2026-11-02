@@ -19,7 +19,7 @@ pnpm db:seed                      # DEMO organizasyonu (yalnız geliştirme)
 pnpm dev                          # web derlenir, API + arayüz http://localhost:8080
 ```
 
-Giriş bilgileri: organizasyon **DEMO**, kullanıcı `admin@demo.texflow.local`, şifre `.env` içindeki `DEMO_PASSWORD` (varsayılan `Demo!2026`). Rol bazlı diğer kullanıcılar: `planlama@`, `teknik@`, `teknikmudur@`, `depo@`, `kalite@`, `stokkontrol@`, `izleyici@`, `bursadepo@` (alan adı aynı).
+Giriş bilgileri: organizasyon **DEMO**, kullanıcı `admin@demo.texflow.local`, şifre `.env` içindeki `DEMO_PASSWORD` (varsayılan `Demo!2026`). Rol bazlı diğer kullanıcılar: `planlama@`, `teknik@`, `teknikmudur@`, `depo@`, `kalite@`, `stokkontrol@`, `izleyici@`, `bursadepo@`, `fabrikamuduru@`, `uretim@`, `operator@` (alan adı aynı). Her rol girişte kendi ana ekranını görür (Fabrika Yönetimi, Üretim, Depo, Operatör).
 
 ### Testler
 
