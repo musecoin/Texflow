@@ -48,6 +48,14 @@ function collectErrors(page: Page) {
   return errs;
 }
 
+/** Grouped sidebar: expand the section if needed, then follow the link. */
+async function openMenu(page: Page, section: string, link: string | RegExp) {
+  const nav = page.getByRole('navigation', { name: 'Ana menü' });
+  const btn = nav.getByRole('button', { name: section });
+  if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
+  await nav.getByRole('link', typeof link === 'string' ? { name: link, exact: true } : { name: link }).click();
+}
+
 test('desktop: order → work order → receive & inspect roll → reserve → ledger', async () => {
   const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'tr-TR' });
   const page = await ctx.newPage(); const errs = collectErrors(page);
@@ -55,7 +63,7 @@ test('desktop: order → work order → receive & inspect roll → reserve → l
   await page.screenshot({ path: path.join(shots, '01-desktop-dashboard.png') });
 
   // create order
-  await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('link', { name: 'Siparişler' }).click();
+  await openMenu(page, 'Sipariş Yönetimi', 'Siparişler');
   await page.getByRole('button', { name: '+ Yeni sipariş' }).click();
   const sheet = page.getByRole('dialog', { name: 'Yeni sipariş' });
   await sheet.getByLabel('Müşteri', { exact: true }).selectOption({ label: 'DEMO Nordic Apparel AB' });
@@ -121,7 +129,7 @@ test('desktop: order → work order → receive & inspect roll → reserve → l
   await page.screenshot({ path: path.join(shots, '04-desktop-reserved.png'), fullPage: true });
 
   // ledger shows the reservation with its source document
-  await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('link', { name: 'Stok Defteri' }).click();
+  await openMenu(page, 'Kumaş & Stok (WMS)', 'Stok Defteri');
   const firstRow = page.locator('tbody tr').first();
   await firstRow.getByText('Rezervasyon').waitFor();
   assert.match(await firstRow.innerText(), /IE-\d{5}/);
@@ -137,6 +145,12 @@ test('desktop: order → work order → receive & inspect roll → reserve → l
   await page.getByText(orderNo).first().waitFor();
   await page.screenshot({ path: path.join(shots, '00-desktop-control-center.png'), fullPage: true });
   assert.deepEqual(errs, []);
+  // menu follows the design's sections; unbuilt sections open an honest roadmap page with no data
+  await openMenu(page, 'Satın Alma', /^Tedarikçiler/);
+  await page.getByRole('heading', { level: 1, name: 'Satın Alma' }).waitFor();
+  await page.getByRole('note').filter({ hasText: 'henüz yapılmadı' }).waitFor();
+  assert.equal(await page.getByRole('table').count(), 0);
+  await page.screenshot({ path: path.join(shots, '05b-roadmap-purchasing.png'), fullPage: true });
   await ctx.close();
 });
 
@@ -157,7 +171,13 @@ test('mobile (Android size): bottom navigation, QR lookup, offline guard blocks 
     const r = await fetch('/api/v1/rolls?limit=1', { headers: { authorization: 'Bearer ' + tok } });
     return (await r.json()).items[0].qrCode as string;
   });
-  await bottom.getByRole('link', { name: 'QR Tara' }).click();
+  // phone menu sheet shows the same sections as the desktop sidebar
+  await bottom.getByRole('button', { name: 'Menü' }).click();
+  const sheet = page.getByRole('navigation', { name: 'Bölümler' });
+  for (const name of ['Sipariş Yönetimi', 'Planlama (APS)', 'Üretim Takibi (MES)', 'Kalite Kontrol (QMS)', 'AI Kontrol Merkezi']) await sheet.getByRole('button', { name }).waitFor();
+  await sheet.getByRole('button', { name: 'Kumaş & Stok (WMS)' }).click();
+  await page.screenshot({ path: path.join(shots, '06b-mobile-menu.png') });
+  await sheet.getByRole('link', { name: 'QR Tara', exact: true }).click();
   await page.getByLabel('QR / top kodu').fill(qr);
   await page.getByRole('button', { name: 'Bul' }).click();
   await page.getByRole('heading', { name: /TOP-\d{6}/ }).waitFor();

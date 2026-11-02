@@ -9,6 +9,8 @@ import { ModelsPage, ModelDetail } from './pages/models.tsx';
 import { InventoryPage, RollDetail, ScanPage } from './pages/inventory.tsx';
 import { WorkOrdersPage, WorkOrderDetail } from './pages/workOrders.tsx';
 import { LedgerPage, AuditPage } from './pages/ledger.tsx';
+import { RoadmapPage } from './pages/roadmap.tsx';
+import { SECTIONS, nextPhase, sectionOf } from './navigation.ts';
 
 // ---------------------------------------------------------------- routing (hash based; works in Capacitor file/webview contexts)
 export function useRoute(): string[] {
@@ -24,16 +26,67 @@ export const MeContext = createContext<Me | null>(null);
 export const useMe = () => useContext(MeContext)!;
 export const useCan = () => { const me = useMe(); return (p: string) => me.permissions.includes(p); };
 
-const NAV: { key: string; path: string; icon: string; perm: string; mobile?: boolean }[] = [
-  { key: 'nav.dashboard', path: '', icon: '▦', perm: 'order.read', mobile: true },
-  { key: 'nav.orders', path: 'orders', icon: '☰', perm: 'order.read' },
-  { key: 'nav.models', path: 'models', icon: '✂', perm: 'model.read' },
-  { key: 'nav.inventory', path: 'inventory', icon: '◫', perm: 'inventory.read', mobile: true },
-  { key: 'nav.workOrders', path: 'work-orders', icon: '⚙', perm: 'workorder.read', mobile: true },
-  { key: 'nav.ledger', path: 'ledger', icon: '≣', perm: 'inventory.read' },
-  { key: 'nav.audit', path: 'audit', icon: '⌛', perm: 'audit.read' },
-  { key: 'nav.scan', path: 'scan', icon: '⌗', perm: 'inventory.read', mobile: true },
+// bottom navigation on phones: the operator's four most used screens
+const MOBILE_NAV: { label: string; path: string; icon: string; perm: string }[] = [
+  { label: 'nav.dashboard', path: '', icon: '▦', perm: 'order.read' },
+  { label: 'nav.inventory', path: 'inventory', icon: '◫', perm: 'inventory.read' },
+  { label: 'nav.workOrders', path: 'work-orders', icon: '⚙', perm: 'workorder.read' },
+  { label: 'nav.scan', path: 'scan', icon: '⌗', perm: 'inventory.read' },
 ];
+
+/** Grouped menu following the "Fabrika Kontrol Merkezi" design; shared by the desktop sidebar and the phone menu sheet. */
+function SectionNav({ route, onNavigate }: { route: string[]; onNavigate?: () => void }) {
+  const can = useCan();
+  const current = sectionOf(route);
+  // accordion: one section open at a time, following the current page
+  const [open, setOpen] = useState<string | null>(current);
+  useEffect(() => { setOpen(current); }, [current]);
+  const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
+  const linkActive = (sKey: string, p: string) => sKey === current && (route[0] === p || (p === 'inventory' && route[0] === 'rolls'));
+  const en = locale === 'en';
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {SECTIONS.map((s) => {
+        const name = en ? s.labelEn : s.label;
+        if (s.path !== undefined) {
+          if (s.perm && !can(s.perm)) return null;
+          const act = current === s.key && route[0] !== 'plan';
+          return <li key={s.key}><a href={'#/' + s.path} onClick={onNavigate} aria-current={act ? 'page' : undefined}
+            className={clsx('flex items-center gap-3 rounded-lg px-3 min-h-11 text-sm font-semibold', act ? 'bg-brand-700 text-white dark:bg-brand-400 dark:text-onbrand dark:glow' : 'text-ink hover:bg-subtle')}>
+            <span className="w-5 text-center" aria-hidden>{s.icon}</span>{name}</a></li>;
+        }
+        const links = s.links.filter((l) => can(l.perm));
+        const isOpen = open === s.key;
+        const np = nextPhase(s);
+        return (
+          <li key={s.key}>
+            <button type="button" onClick={() => toggle(s.key)} aria-expanded={isOpen}
+              className={clsx('w-full flex items-center gap-3 rounded-lg px-3 min-h-11 text-sm font-semibold text-left', current === s.key ? 'text-brand-700 dark:text-brand-300' : 'text-ink', 'hover:bg-subtle')}>
+              <span className="w-5 text-center" aria-hidden>{s.icon}</span>
+              <span className="flex-1">{name}</span>
+              {!links.length && np && <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-subtle text-muted">Faz {np}</span>}
+              <span aria-hidden className={clsx('text-xs text-muted transition-transform', isOpen && 'rotate-90')}>›</span>
+            </button>
+            {isOpen && (
+              <ul className="ml-5 pl-3 border-l border-line flex flex-col gap-0.5 py-1">
+                {links.map((l) => {
+                  const act = linkActive(s.key, l.path);
+                  return <li key={l.label}><a href={'#/' + l.path} onClick={onNavigate} aria-current={act ? 'page' : undefined}
+                    className={clsx('flex items-center rounded-md px-3 min-h-10 text-sm', act ? 'bg-brand-700 text-white dark:bg-brand-400 dark:text-onbrand' : 'text-ink hover:bg-subtle')}>{l.label}</a></li>;
+                })}
+                {s.planned.map((p) => (
+                  <li key={p.label}><a href={'#/plan/' + s.key} onClick={onNavigate} title={p.detail}
+                    className={clsx('flex items-center gap-2 rounded-md px-3 min-h-9 text-[13px] text-muted hover:bg-subtle', route[0] === 'plan' && route[1] === s.key && 'bg-subtle')}>
+                    <span className="flex-1">{p.label}</span><span className="text-[10px] opacity-80">Faz {p.phase}</span></a></li>
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 function LoginScreen() {
   const [org, setOrg] = useState('DEMO'); const [email, setEmail] = useState(''); const [pw, setPw] = useState('');
@@ -91,20 +144,13 @@ function Shell({ children, route }: { children: ReactNode; route: string[] }) {
   const me = useMe(); const can = useCan();
   const { online, live } = useContext(LiveContext);
   const [menu, setMenu] = useState(false);
-  const active = (p: string) => (p === '' ? route.length === 0 : route[0] === p || route[0] === p.replace(/s$/, '') || (p === 'inventory' && route[0] === 'rolls'));
-  const nav = NAV.filter((n) => can(n.perm));
+  const active = (p: string) => (p === '' ? route.length === 0 : route[0] === p || (p === 'inventory' && route[0] === 'rolls'));
+  const mobileNav = MOBILE_NAV.filter((n) => can(n.perm));
   return (
     <div className="min-h-dvh bg-canvas text-ink lg:pl-64">
       <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col border-r border-line bg-surface">
         <div className="flex items-center gap-3 px-5 h-16 border-b border-line"><Logo /><div><div className="font-bold">{t('app.name')}</div><div className="text-xs text-muted">{t('app.tagline')}</div></div></div>
-        <nav className="flex-1 overflow-y-auto p-3 flex flex-col gap-1" aria-label="Ana menü">
-          {nav.map((n) => (
-            <a key={n.path} href={'#/' + n.path} aria-current={active(n.path) ? 'page' : undefined}
-              className={clsx('flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium', active(n.path) ? 'bg-brand-700 text-white dark:bg-brand-400 dark:text-onbrand dark:glow' : 'text-ink hover:bg-subtle')}>
-              <span className="w-5 text-center" aria-hidden>{n.icon}</span>{t(n.key)}
-            </a>
-          ))}
-        </nav>
+        <nav className="flex-1 overflow-y-auto p-3" aria-label="Ana menü"><SectionNav route={route} /></nav>
         <div className="p-4 border-t border-line text-xs text-muted space-y-1">
           <div className="font-semibold text-ink">{me.user.displayName}</div>
           <div>{me.organization.name}</div>
@@ -128,10 +174,10 @@ function Shell({ children, route }: { children: ReactNode; route: string[] }) {
       <main className="p-4 lg:p-8 pb-28 lg:pb-8 max-w-7xl">{children}</main>
 
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 grid grid-cols-5 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]" aria-label="Alt menü">
-        {nav.filter((n) => n.mobile).slice(0, 4).map((n) => (
+        {mobileNav.map((n) => (
           <a key={n.path} href={'#/' + n.path} aria-current={active(n.path) ? 'page' : undefined}
             className={clsx('flex flex-col items-center justify-center gap-0.5 min-h-16 text-[11px] font-medium', active(n.path) ? 'text-brand-700 dark:text-brand-300' : 'text-muted')}>
-            <span className="text-lg leading-none" aria-hidden>{n.icon}</span>{t(n.key)}
+            <span className="text-lg leading-none" aria-hidden>{n.icon}</span>{t(n.label)}
           </a>
         ))}
         <button onClick={() => setMenu(true)} className="flex flex-col items-center justify-center gap-0.5 min-h-16 text-[11px] font-medium text-muted"><span className="text-lg leading-none" aria-hidden>⋯</span>{t('nav.more')}</button>
@@ -139,9 +185,9 @@ function Shell({ children, route }: { children: ReactNode; route: string[] }) {
       {menu && (
         <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={t('nav.more')}>
           <div className="absolute inset-0 bg-black/40" onClick={() => setMenu(false)} />
-          <div className="absolute bottom-0 inset-x-0 rounded-t-2xl bg-surface p-4 pb-8 flex flex-col gap-1">
+          <div className="absolute bottom-0 inset-x-0 max-h-[85dvh] overflow-y-auto rounded-t-2xl bg-surface p-4 pb-8 flex flex-col gap-1">
             <div className="text-sm font-semibold text-ink mb-2">{me.user.displayName} · {me.organization.code}</div>
-            {nav.map((n) => <a key={n.path} href={'#/' + n.path} onClick={() => setMenu(false)} className="flex items-center gap-3 rounded-lg px-3 min-h-12 text-ink hover:bg-subtle"><span aria-hidden>{n.icon}</span>{t(n.key)}</a>)}
+            <nav aria-label="Bölümler"><SectionNav route={route} onNavigate={() => setMenu(false)} /></nav>
             <Button variant="secondary" className="mt-2" onClick={() => void logout()}>{t('common.logout')}</Button>
           </div>
         </div>
@@ -162,6 +208,7 @@ function Routes({ route }: { route: string[] }) {
     case 'work-orders': return b ? <WorkOrderDetail id={b} /> : <WorkOrdersPage />;
     case 'ledger': return <LedgerPage />;
     case 'audit': return <AuditPage />;
+    case 'plan': return <RoadmapPage sectionKey={b} />;
     default: return <ErrorBox error={new Error('Sayfa bulunamadı')} />;
   }
 }
