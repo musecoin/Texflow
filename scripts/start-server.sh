@@ -6,6 +6,10 @@
 #   SEED_DEMO=1       load the DEMO organization once (demo servers only)
 set -eu
 : "${DATABASE_URL:?DATABASE_URL is required}"
+# tolerate values pasted from a .env line: DATABASE_URL="postgresql://..." (prefix, quotes, spaces)
+DATABASE_URL=$(printf '%s' "$DATABASE_URL" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^DATABASE_URL[[:space:]]*=[[:space:]]*//' -e 's/^["'"'"']//' -e 's/["'"'"']$//')
+export DATABASE_URL
+case "$DATABASE_URL" in postgres://*|postgresql://*) ;; *) echo "DATABASE_URL must start with postgresql:// (check the value pasted into Render)" >&2; exit 1 ;; esac
 if [ -z "${APP_DATABASE_URL:-}" ]; then
   : "${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}"
   APP_DATABASE_URL=$(node -e '
