@@ -55,3 +55,16 @@ docs             mimari, kabul kriterleri, test raporu, açıklar ve riskler
 ```
 
 API belgesi: çalışan sunucuda `GET /api/v1/openapi.json` (OpenAPI 3.1; 46 iş uç noktası + sağlık/OpenAPI).
+
+## Fotoğraftan sipariş (yapay zeka)
+
+Siparişler → **📷 Fotoğraftan sipariş**. Sipariş veya kesim föyünün fotoğrafı Claude API ile okunur.
+- **Okuma:** Yapay zeka yalnızca kağıtta yazanı aktarır.
+- **Kontroller:** Toplam, tekrar eden satır, kesilen–istenen farkı ve beden oranı kontrollerini sistemin kendi kodu yapar.
+- **Eşleştirme:** Renk, beden, model ve müşteri mevcut kayıtlarla eşleştirilir. Eksik renk, beden ve model ekrandan eklenebilir (`model.write` yetkisi gerekir).
+- **Kayıt:** Kullanıcı düzenleyip onaylayınca sipariş **TASLAK** olarak açılır. Onaydan önce hiçbir kayıt oluşturulmaz.
+- **Saklama:** Fotoğraf saklanmaz; yalnızca okuma özeti denetim kaydına yazılır.
+
+Açmak için sunucuya `ANTHROPIC_API_KEY` tanımlayın (Render → Environment). İsteğe bağlı ayarlar:
+- `AI_MODEL`: varsayılan `claude-sonnet-5-5`
+- `AI_RATE_PER_HOUR`: organizasyon başına saatlik okuma sınırı, varsayılan 30

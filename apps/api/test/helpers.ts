@@ -4,7 +4,7 @@
  */
 import crypto from 'node:crypto';
 import { loadDotEnv, migrate, Connection, parseDatabaseUrl, seedOrganization, type SeededOrg } from '@texflow/db';
-import { loadConfig } from '../src/config.ts';
+import { loadConfig, type Config } from '../src/config.ts';
 import { createApp } from '../src/app.ts';
 
 export const PASSWORD = 'Test!Passw0rd';
@@ -40,7 +40,7 @@ export async function rawPost(base: string, path: string, body: unknown, headers
   return { status: r.status, body: t ? JSON.parse(t) : null, headers: r.headers };
 }
 
-export async function setup(): Promise<Harness> {
+export async function setup(cfg: Partial<Config> = {}): Promise<Harness> {
   loadDotEnv();
   const dbUrl = process.env.TEST_DATABASE_URL; const appUrl = process.env.TEST_APP_DATABASE_URL;
   if (!dbUrl || !appUrl) throw new Error('TEST_DATABASE_URL and TEST_APP_DATABASE_URL must be set');
@@ -51,7 +51,7 @@ export async function setup(): Promise<Harness> {
   const a = await seedOrganization(owner, { code: 'ACME', name: 'Acme Tekstil (test)', isDemo: false, password: PASSWORD, emailDomain: 'acme.test', withDemoModel: false });
   const b = await seedOrganization(owner, { code: 'BETA', name: 'Beta Konfeksiyon (test)', isDemo: false, password: PASSWORD, emailDomain: 'beta.test', withDemoModel: false });
   await owner.end();
-  const app = createApp(loadConfig({ appDatabaseUrl: appUrl, apiRatePerMin: 100_000, loginRatePerMin: 1000, webDistDir: null, corsOrigins: [] }));
+  const app = createApp(loadConfig({ appDatabaseUrl: appUrl, apiRatePerMin: 100_000, loginRatePerMin: 1000, webDistDir: null, corsOrigins: [], ...cfg }));
   const port = await app.listen(0, '127.0.0.1');
   const base = `http://127.0.0.1:${port}`;
   return {

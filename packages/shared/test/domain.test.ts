@@ -94,3 +94,42 @@ test('schemas: reject float numbers, bad dates and negative quantities', () => {
   assert.equal(ReceiveRollsReq.safeParse({ factoryId: base.factoryId, supplierId: base.factoryId, warehouseId: base.factoryId,
     rolls: [{ materialId: base.factoryId, lotNo: 'L', shade: 'A', quantity: '-1', unit: 'M' }] }).success, false);
 });
+
+// ---------------------------------------------------------------- order sheet import (deterministic part)
+import { OrderSheetExtraction, buildDraft, checkExtraction, matchColor, matchSize, normSize } from '../src/orderSheet.ts';
+
+test('order sheet: draft splits by written size ratio in whole sets, reports remainders, merges duplicate colours', () => {
+  const x = OrderSheetExtraction.parse({
+    sizes: [{ size: 'L', ratio: 1 }, { size: 'XL', ratio: 1 }, { size: 'XXL', ratio: 1 }, { size: 'XXXL', ratio: 1 }],
+    sections: [
+      { title: 'ADET', kind: 'cut', printedTotal: 1496, lines: [{ color: 'siyah', size: null, quantity: 240 }, { color: 'laci', size: null, quantity: 624 }, { color: 'Siyah', size: null, quantity: 632 }] },
+      { title: 'İSTENEN', kind: 'requested', printedTotal: 1400, lines: [{ color: 'SİYAH', size: null, quantity: 810 }, { color: 'LACİ', size: null, quantity: 610 }] },
+    ],
+  });
+  const req = buildDraft(x, 1);
+  assert.deepEqual(req.sizes, ['L', 'XL', 'XXL', '3XL']);
+  assert.deepEqual(req.cells.filter((c) => c.color === 'SİYAH').map((c) => c.qty), [202, 202, 202, 202]);
+  assert.deepEqual(req.unassigned, [{ color: 'SİYAH', qty: 2 }, { color: 'LACİ', qty: 2 }]);
+  const total = req.cells.reduce((a, c) => a + c.qty, 0) + req.unassigned.reduce((a, c) => a + c.qty, 0);
+  assert.equal(total, 1420, 'nothing lost, nothing invented');
+  const cut = buildDraft(x, 0);
+  assert.deepEqual(cut.colors, ['siyah', 'laci']);
+  assert.deepEqual(cut.cells.filter((c) => c.color === 'siyah').map((c) => c.qty), [218, 218, 218, 218]);
+  assert.deepEqual(cut.unassigned, []);
+  const codes = checkExtraction(x).map((c) => c.code);
+  assert.ok(codes.includes('TOTAL_MISMATCH'), '1420 ≠ printed 1400 is an error');
+  assert.ok(codes.includes('DUPLICATE_LINE') && codes.includes('CUT_VS_REQUESTED') && codes.includes('DUE_DATE_MISSING'));
+});
+
+test('order sheet: colour / size matching is Turkish-aware and refuses ambiguity', () => {
+  const colors = [{ id: '1', code: 'SYH', name: 'Siyah' }, { id: '2', code: 'LCV', name: 'Lacivert' }, { id: '3', code: 'LAC', name: 'Lacivert Koyu' }];
+  assert.equal(matchColor('SİYAH', colors)?.id, '1');
+  assert.equal(matchColor('lcv', colors)?.id, '2');
+  assert.equal(matchColor('laci', colors), null, 'two Lacivert colours → no guess');
+  assert.equal(matchColor('la', colors), null);
+  assert.equal(matchColor('laci', colors.slice(0, 2))?.id, '2');
+  assert.equal(normSize('xxxl'), '3XL'); assert.equal(normSize(' 2xl '), 'XXL');
+  assert.equal(matchSize('XXXL', [{ id: 'a', code: '3XL' }])?.id, 'a');
+  // AI output that does not fit the schema is rejected, not repaired
+  assert.equal(OrderSheetExtraction.safeParse({ sections: [{ title: 'x', lines: [{ color: 'a', quantity: -3 }] }] }).success, false);
+});

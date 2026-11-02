@@ -10,6 +10,8 @@ export interface Config {
   webDistDir: string | null;
   maxBodyBytes: number;
   trustProxy: boolean;
+  /** AI document reading (photo → order draft). Disabled when no key is set. */
+  ai: { apiKey: string | null; model: string; baseUrl: string; perHour: number; timeoutMs: number };
 }
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -32,6 +34,13 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     webDistDir: e.WEB_DIST_DIR ?? null,
     maxBodyBytes: 1_000_000,
     trustProxy: e.TRUST_PROXY === '1',
+    ai: {
+      apiKey: e.ANTHROPIC_API_KEY?.trim() || null,
+      model: e.AI_MODEL ?? 'claude-sonnet-5-5',
+      baseUrl: (e.AI_BASE_URL ?? 'https://api.anthropic.com').replace(/\/$/, ''),
+      perHour: Number(e.AI_RATE_PER_HOUR ?? 30),
+      timeoutMs: Number(e.AI_TIMEOUT_MS ?? 90_000),
+    },
     ...overrides,
   };
 }

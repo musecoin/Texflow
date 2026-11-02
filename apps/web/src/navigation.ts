@@ -19,7 +19,7 @@ export const SECTIONS: NavSection[] = [
   { key: 'dashboard', label: 'Ana Panel', labelEn: 'Control centre', icon: '▦', path: '', perm: 'org.read', links: [], planned: [],
     summary: 'Fabrikanın anlık durumu, uyarılar ve sipariş yolculuğu.' },
   { key: 'orders', label: 'Sipariş Yönetimi', labelEn: 'Order management', icon: '☰', summary: 'Müşteri siparişleri, revizyonlar ve sipariş durumu.',
-    links: [{ label: 'Siparişler', path: 'orders', perm: 'order.read' }],
+    links: [{ label: 'Siparişler', path: 'orders', perm: 'order.read' }, { label: 'Fotoğraftan sipariş', path: 'orders/import', perm: 'order.create' }],
     planned: [
       { label: 'Müşteriler', module: 'M01', phase: 1, detail: 'Müşteri kartı, iletişim, ödeme ve teslim koşulları' },
       { label: 'Sipariş revizyonları', module: 'M01', phase: 1, detail: 'Revizyon geçmişi, değişiklik onayı, iş emrine etki analizi' },

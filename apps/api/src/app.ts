@@ -13,6 +13,7 @@ import { inventoryRoutes } from './modules/inventory.ts';
 import { workOrderRoutes } from './modules/workOrders.ts';
 import { auditRoutes } from './modules/audit.ts';
 import { homeRoutes } from './modules/home.ts';
+import { orderImportRoutes } from './modules/orderImport.ts';
 
 export const API_VERSION = '1.0.0-phase0';
 
@@ -56,7 +57,7 @@ export function createApp(config: Config) {
   const pool = new Pool({ ...parseDatabaseUrl(config.appDatabaseUrl), applicationName: 'texflow-api' }, 20);
   const events = new EventBus();
   const routes: Route[] = [
-    ...authRoutes(config), ...referenceRoutes(), ...orderRoutes(), ...plmRoutes(), ...inventoryRoutes(), ...workOrderRoutes(), ...auditRoutes(), ...homeRoutes(),
+    ...authRoutes(config), ...referenceRoutes(), ...orderRoutes(), ...plmRoutes(), ...inventoryRoutes(), ...workOrderRoutes(), ...auditRoutes(), ...homeRoutes(), ...orderImportRoutes(config),
   ];
   const spec = openApi(routes);
   routes.push(

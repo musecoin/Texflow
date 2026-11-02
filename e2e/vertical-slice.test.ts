@@ -11,6 +11,25 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { loadDotEnv, migrate, Connection, parseDatabaseUrl, seedOrganization } from '@texflow/db';
 import { loadConfig } from '../apps/api/src/config.ts';
 import { createApp } from '../apps/api/src/app.ts';
+import http from 'node:http';
+
+// fake Messages API for the photo-import screen (no real AI call in tests)
+const aiCalls: any[] = [];
+const fakeAi = http.createServer(async (req, res) => {
+  let raw = ''; for await (const ch of req) raw += ch;
+  aiCalls.push(JSON.parse(raw));
+  res.writeHead(200, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', stop_reason: 'tool_use', usage: { input_tokens: 1500, output_tokens: 700 },
+    content: [{ type: 'tool_use', id: 't1', name: 'record_order_sheet', input: {
+      customer: 'ÖRNEK MARKA', partyNo: '1092', modelCode: '288-PNT', modelName: 'Paça Reçme Pantolon', productType: 'PANTOLON', fabric: 'Likralı iki iplik', composition: '%92 pamuk, %8 elastan',
+      labelBrand: 'örnek etiket', cuttingDate: '2026-10-13', dueDate: null, workshop: null, notes: ['bedenler ayrı ayrı paketlenecek', 'baskı renkleri için yetkili onayı alınsın'], decorations: ['REFLECTOR'],
+      sizes: [{ size: 'L', ratio: 1 }, { size: 'XL', ratio: 1 }, { size: 'XXL', ratio: 1 }, { size: '3XL', ratio: 1 }],
+      sections: [
+        { title: 'ADET', kind: 'cut', printedTotal: 1496, lines: [{ color: 'siyah', size: null, quantity: 240, uncertain: false }, { color: 'laci', size: null, quantity: 624, uncertain: false }, { color: 'siyah', size: null, quantity: 632, uncertain: false }] },
+        { title: 'İSTENEN RENK ORANTISI', kind: 'requested', printedTotal: 1420, lines: [{ color: 'SİYAH', size: null, quantity: 810, uncertain: false }, { color: 'LACİ', size: null, quantity: 610, uncertain: false }] },
+      ],
+      measurements: [{ name: 'EN', values: [{ size: 'L', value: 76 }, { size: 'XL', value: 80 }, { size: 'XXL', value: 84 }, { size: '3XL', value: 88 }] }], uncertainties: [] } }] }));
+});
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const shots = path.join(here, 'screenshots');
@@ -24,13 +43,16 @@ before(async () => {
   const c = new Connection(parseDatabaseUrl(process.env.TEST_DATABASE_URL!)); await c.connect();
   await seedOrganization(c, { code: 'DEMO', name: 'DEMO Tekstil A.Ş.', isDemo: true, password: PASSWORD, emailDomain: 'demo.texflow.local', settings: { allowSelfApproval: true }, withDemoModel: true });
   await c.end();
-  app = createApp(loadConfig({ appDatabaseUrl: process.env.TEST_APP_DATABASE_URL!, webDistDir: path.join(here, '../apps/web/dist'), apiRatePerMin: 100_000, loginRatePerMin: 1000 }));
+  await new Promise<void>((r) => fakeAi.listen(0, '127.0.0.1', r));
+  const aiUrl = `http://127.0.0.1:${(fakeAi.address() as { port: number }).port}`;
+  app = createApp(loadConfig({ appDatabaseUrl: process.env.TEST_APP_DATABASE_URL!, webDistDir: path.join(here, '../apps/web/dist'), apiRatePerMin: 100_000, loginRatePerMin: 1000,
+    ai: { apiKey: 'sk-e2e', model: 'claude-sonnet-5-5', baseUrl: aiUrl, perHour: 50, timeoutMs: 10_000 } }));
   base = `http://127.0.0.1:${await app.listen(0, '127.0.0.1')}`;
   process.env.PLAYWRIGHT_BROWSERS_PATH ??= '/opt/pw-browsers';
   browser = await chromium.launch();
   fs.mkdirSync(shots, { recursive: true });
 });
-after(async () => { await browser?.close(); await app?.close(); });
+after(async () => { await browser?.close(); await app?.close(); fakeAi.closeAllConnections(); fakeAi.close(); });
 
 async function loginAs(page: Page, email: string) {
   await page.goto(base + '/');
@@ -241,6 +263,54 @@ test('operator (Android size): role home with prioritized actions; unrecorded en
   await page.screenshot({ path: path.join(shots, '09-mobile-operator.png'), fullPage: true });
   await qr.click();
   await page.getByLabel('QR / top kodu').waitFor();
+  assert.deepEqual(errs, []);
+  await ctx.close();
+});
+
+test('photo → order: sheet photo is read, reviewed, missing sizes/model added, DRAFT order created', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'tr-TR' });
+  const page = await ctx.newPage(); const errs = collectErrors(page);
+  // a synthetic sheet image (generic content) rendered by the browser itself
+  const sheet = await ctx.newPage();
+  await sheet.setContent('<body style="font:20px sans-serif;padding:30px"><h2>KESİM FÖYÜ · MODEL 288-PNT</h2><table border=1 cellpadding=6><tr><td>siyah</td><td>810</td></tr><tr><td>laci</td><td>610</td></tr></table></body>');
+  const jpeg = await sheet.screenshot({ type: 'jpeg' }); await sheet.close();
+
+  await loginAs(page, 'admin@demo.texflow.local');
+  await openMenu(page, 'Sipariş Yönetimi', 'Siparişler');
+  await page.getByRole('button', { name: /Fotoğraftan sipariş/ }).click();
+  await page.getByRole('heading', { level: 1, name: 'Fotoğraftan sipariş' }).waitFor();
+  await page.getByLabel('Föy fotoğrafı').setInputFiles({ name: 'foy.jpg', mimeType: 'image/jpeg', buffer: jpeg });
+  await page.getByRole('button', { name: 'Oku' }).click();
+  await page.getByText('Okuma sonucu ve kontroller').waitFor();
+  // the photo actually went to the AI service, downscaled JPEG as base64
+  assert.equal(aiCalls.at(-1).messages[0].content[0].source.media_type, 'image/jpeg');
+  await page.getByText(/Kesilen \(1496\) ile istenen \(1420\) farklı/).waitFor();
+  await page.getByText('"XXL" bedeni sistemde yok.').waitFor();
+  // nothing can be created yet
+  const create = page.getByRole('button', { name: /Taslak sipariş oluştur/ });
+  assert.equal(await create.isDisabled(), true);
+
+  // resolve: customer, due date, missing sizes, model, remainders (810 = 4×202 + 2, 610 = 4×152 + 2)
+  await page.getByLabel('Müşteri', { exact: true }).selectOption({ label: 'DEMO Nordic Apparel AB' });
+  await page.getByLabel('Termin').fill('2026-12-20');
+  await page.getByRole('columnheader', { name: /XXL/ }).getByRole('button', { name: 'Ekle' }).click();
+  await page.getByRole('columnheader', { name: /3XL/ }).getByRole('button', { name: 'Ekle' }).click();
+  await page.getByText('3XL bedeni eklendi').waitFor();
+  await page.getByRole('button', { name: /Modeli oluştur \(2 renk × 4 beden\)/ }).click();
+  await page.getByText('288-PNT modeli taslak olarak oluşturuldu').waitFor();
+  await page.getByLabel('SİYAH L adet').fill('204');
+  await page.getByLabel('LACİ L adet').fill('154');
+  await page.getByLabel('SİYAH birim fiyat').fill('4,85');
+  await page.screenshot({ path: path.join(shots, '10-photo-import-review.png'), fullPage: true });
+  await create.waitFor({ state: 'visible' });
+  assert.equal(await create.isDisabled(), false, 'all problems resolved');
+  await create.click();
+  await page.getByText('Taslak sipariş oluşturuldu').waitFor();
+  await page.getByRole('heading', { level: 1, name: /SIP/ }).waitFor();
+  const body = await page.locator('main').innerText();
+  assert.match(body, /Taslak/);
+  assert.match(body, /1\.420|1420/);
+  await page.screenshot({ path: path.join(shots, '11-photo-import-order.png'), fullPage: true });
   assert.deepEqual(errs, []);
   await ctx.close();
 });

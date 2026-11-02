@@ -10,6 +10,7 @@ import { InventoryPage, RollDetail, ScanPage } from './pages/inventory.tsx';
 import { WorkOrdersPage, WorkOrderDetail } from './pages/workOrders.tsx';
 import { LedgerPage, AuditPage } from './pages/ledger.tsx';
 import { RoadmapPage } from './pages/roadmap.tsx';
+import { OrderImportPage } from './pages/orderImport.tsx';
 import { SECTIONS, nextPhase, sectionOf } from './navigation.ts';
 
 // ---------------------------------------------------------------- routing (hash based; works in Capacitor file/webview contexts)
@@ -42,7 +43,10 @@ function SectionNav({ route, onNavigate }: { route: string[]; onNavigate?: () =>
   const [open, setOpen] = useState<string | null>(current);
   useEffect(() => { setOpen(current); }, [current]);
   const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
-  const linkActive = (sKey: string, p: string) => sKey === current && (route[0] === p || (p === 'inventory' && route[0] === 'rolls'));
+  // most specific link wins (orders/import vs orders)
+  const rp = route.join('/');
+  const under = (p: string) => rp === p || rp.startsWith(p + '/');
+  const linkActive = (sKey: string, p: string) => sKey === current && ((under(p) && !SECTIONS.find((x) => x.key === sKey)!.links.some((o) => o.path.length > p.length && under(o.path))) || (p === 'inventory' && route[0] === 'rolls'));
   const en = locale === 'en';
   return (
     <ul className="flex flex-col gap-0.5">
@@ -212,7 +216,7 @@ function Routes({ route }: { route: string[] }) {
   const [a, b] = route;
   switch (a) {
     case undefined: return <Home />;
-    case 'orders': return b ? <OrderDetail id={b} /> : <OrdersPage />;
+    case 'orders': return b === 'import' ? <OrderImportPage /> : b ? <OrderDetail id={b} /> : <OrdersPage />;
     case 'models': return b ? <ModelDetail id={b} /> : <ModelsPage />;
     case 'inventory': return <InventoryPage />;
     case 'rolls': return <RollDetail id={b} />;

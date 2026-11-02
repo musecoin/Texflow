@@ -51,7 +51,7 @@ export interface PublicCtx<B = any> {
 
 export interface HandlerResult { status?: number; body: unknown; headers?: Record<string, string> }
 
-interface BaseRoute { method: Method; path: string; summary: string; tag: string; body?: z.ZodType; query?: z.ZodType; responseExample?: unknown }
+interface BaseRoute { method: Method; path: string; summary: string; tag: string; body?: z.ZodType; query?: z.ZodType; responseExample?: unknown; /** per-route body limit (default config.maxBodyBytes) */ maxBodyBytes?: number }
 export interface AuthedRoute extends BaseRoute {
   public?: undefined;
   /** permission code required; null = any authenticated user */
@@ -127,10 +127,10 @@ export function createKernel(deps: { pool: Pool; config: Config; events: EventBu
     return new AppError('INTERNAL', 'Beklenmeyen bir hata oluştu');
   }
 
-  async function readBody(req: http.IncomingMessage): Promise<unknown> {
+  async function readBody(req: http.IncomingMessage, limit = config.maxBodyBytes): Promise<unknown> {
     if (req.method === 'GET' || req.method === 'HEAD') return undefined;
     const chunks: Buffer[] = []; let size = 0;
-    for await (const c of req) { size += (c as Buffer).length; if (size > config.maxBodyBytes) throw new AppError('PAYLOAD_TOO_LARGE', 'İstek gövdesi çok büyük'); chunks.push(c as Buffer); }
+    for await (const c of req) { size += (c as Buffer).length; if (size > limit) throw new AppError('PAYLOAD_TOO_LARGE', 'İstek gövdesi çok büyük'); chunks.push(c as Buffer); }
     if (!size) return {};
     const ct = req.headers['content-type'] ?? '';
     if (!ct.includes('application/json')) throw new AppError('VALIDATION_FAILED', 'Content-Type application/json olmalı');
@@ -211,7 +211,7 @@ export function createKernel(deps: { pool: Pool; config: Config; events: EventBu
     try {
       const wait = apiLimiter.check(ip);
       if (wait) throw Object.assign(new AppError('RATE_LIMITED', 'Çok fazla istek'), { retryAfter: wait });
-      const rawBody = await readBody(req);
+      const rawBody = await readBody(req, route.maxBodyBytes);
       const body = route.body ? route.body.parse(rawBody) : rawBody;
       const query = route.query ? route.query.parse(Object.fromEntries(url.searchParams)) : Object.fromEntries(url.searchParams);
 

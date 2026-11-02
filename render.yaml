@@ -21,6 +21,10 @@ services:
         value: "1"
       - key: DEMO_PASSWORD
         sync: false
+      - key: ANTHROPIC_API_KEY   # optional: enables "Fotoğraftan sipariş"
+        sync: false
+      - key: AI_RATE_PER_HOUR
+        value: "30"
       - key: TRUST_PROXY
         value: "1"
       - key: CORS_ORIGINS

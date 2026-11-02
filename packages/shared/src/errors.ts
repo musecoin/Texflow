@@ -23,6 +23,8 @@ export const ERROR_CODES = {
   SELF_APPROVAL_FORBIDDEN: 403,
   RATE_LIMITED: 429,
   PAYLOAD_TOO_LARGE: 413,
+  AI_NOT_CONFIGURED: 503,
+  AI_FAILED: 502,
   INTERNAL: 500,
 } as const;
 export type ErrorCode = keyof typeof ERROR_CODES;
